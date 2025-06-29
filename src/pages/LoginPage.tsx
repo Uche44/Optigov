@@ -1,204 +1,224 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
-import { Shield, Mail, Phone, Lock, User, Eye, EyeOff, Sun, Moon, AlertCircle } from 'lucide-react';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import {
+  Shield,
+  Mail,
+  Phone,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon,
+  AlertCircle,
+} from "lucide-react";
+import {
+  UserRole,
+  SignupData,
+  LoginData,
+  StoredUser,
+} from "../types/authTypes";
 
-type UserRole = 'citizen' | 'company' | 'admin';
-type FormMode = 'login' | 'signup';
+// type UserRole = 'citizen' | 'company' | 'admin';
+type FormMode = "login" | "signup";
 
-interface SignupData {
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
+type ValidationContext = {
+  mode: "signup" | "login";
   role: UserRole;
-}
-
-interface LoginData {
-  emailOrPhone: string;
-  password: string;
-}
-
-interface StoredUser {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  role: UserRole;
-  createdAt: string;
-}
+  signupData?: SignupData;
+  loginData?: LoginData;
+};
 
 const LoginPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<UserRole>('citizen');
-  const [formMode, setFormMode] = useState<FormMode>('login');
+  const [activeTab, setActiveTab] = useState<UserRole>("citizen");
+  const [formMode, setFormMode] = useState<FormMode>("login");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
+  const [error, setError] = useState("");
+
   const [signupData, setSignupData] = useState<SignupData>({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    role: 'citizen'
+    fullName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    role: "citizen",
   });
 
   const [loginData, setLoginData] = useState<LoginData>({
-    emailOrPhone: '',
-    password: ''
+    emailOrPhone: "",
+    password: "",
   });
-  
+
   const { login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const tabs: { key: UserRole; label: string; color: string }[] = [
-    { key: 'citizen', label: 'Citizen', color: 'bg-green-600' },
-    { key: 'company', label: 'Company', color: 'bg-blue-600' },
-    { key: 'admin', label: 'Admin', color: 'bg-purple-600' }
+    { key: "citizen", label: "Citizen", color: "bg-green-600" },
+    { key: "company", label: "Company", color: "bg-blue-600" },
+    { key: "admin", label: "Admin", color: "bg-purple-600" },
   ];
 
-  const validateEmail = (email: string) => {
+  const validate = (context: ValidationContext): string | null => {
+    const { mode, role, signupData, loginData } = context;
+
+    // Helper regex/functions
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePhone = (phone: string) => {
     const phoneRegex = /^(\+234|0)[789][01]\d{8}$/;
-    return phoneRegex.test(phone.replace(/\s/g, ''));
-  };
+    const businessDomains = [".com.ng", ".ng", ".com", ".org", ".net"];
+    const excludePersonalDomains = [
+      "gmail.com",
+      "yahoo.com",
+      "hotmail.com",
+      "outlook.com",
+    ];
 
-  const validatePassword = (password: string) => {
-    return password.length >= 6;
-  };
+    const isBusinessEmail = (email: string) => {
+      const domain = email.split("@")[1]?.toLowerCase();
+      if (!domain) return false;
+      if (excludePersonalDomains.includes(domain)) return false;
+      return businessDomains.some((bd) => domain.includes(bd.replace(".", "")));
+    };
 
-  const validateCompanyEmail = (email: string) => {
-    // Company emails should have business domains
-    const businessDomains = ['.com.ng', '.ng', '.com', '.org', '.net'];
-    const excludePersonalDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com'];
-    
-    const domain = email.split('@')[1]?.toLowerCase();
-    if (!domain) return false;
-    
-    // Check if it's a personal email domain
-    if (excludePersonalDomains.includes(domain)) return false;
-    
-    // Check if it has a business-like domain
-    return businessDomains.some(bd => domain.includes(bd.replace('.', '')));
+    if (mode === "signup" && signupData) {
+      if (!signupData.fullName.trim()) return "Full name is required";
+      if (!emailRegex.test(signupData.email))
+        return "Please enter a valid email address";
+
+      if (role === "company" && !isBusinessEmail(signupData.email)) {
+        return "Company accounts must use business email domains (not gmail, yahoo, etc.)";
+      }
+      if (role === "citizen" && isBusinessEmail(signupData.email)) {
+        return "Citizen accounts should use personal email addresses like gmail.com";
+      }
+
+      if (!phoneRegex.test(signupData.phone.replace(/\s/g, ""))) {
+        return "Please enter a valid Nigerian phone number";
+      }
+      if (signupData.password.length < 6)
+        return "Password must be at least 6 characters long";
+      if (signupData.password !== signupData.confirmPassword)
+        return "Passwords do not match";
+    }
+
+    if (mode === "login" && loginData) {
+      if (!loginData.emailOrPhone.trim())
+        return "Email or phone number is required";
+      if (!loginData.password.trim()) return "Password is required";
+    }
+
+    return null; // No errors
   };
 
   const handleSignup = async () => {
-    setError('');
-    
-    // Validation
-    if (!signupData.fullName.trim()) {
-      setError('Full name is required');
-      return;
-    }
-    
-    if (!validateEmail(signupData.email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
+    setError("");
 
-    // Special validation for company emails
-    if (activeTab === 'company' && !validateCompanyEmail(signupData.email)) {
-      setError('Company accounts must use business email domains (not gmail, yahoo, etc.)');
-      return;
-    }
-
-    // Citizens should use personal emails
-    if (activeTab === 'citizen' && validateCompanyEmail(signupData.email)) {
-      setError('Citizen accounts should use personal email addresses like gmail.com');
-      return;
-    }
-    
-    if (!validatePhone(signupData.phone)) {
-      setError('Please enter a valid Nigerian phone number');
-      return;
-    }
-    
-    if (!validatePassword(signupData.password)) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-    
-    if (signupData.password !== signupData.confirmPassword) {
-      setError('Passwords do not match');
+    const validationError = validate({
+      mode: "signup",
+      role: activeTab,
+      signupData,
+    });
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setLoading(true);
 
     try {
-      // Get existing users from localStorage
-      const existingUsers: StoredUser[] = JSON.parse(localStorage.getItem('optigov_users') || '[]');
-      
-      // Check if user already exists
-      const userExists = existingUsers.some(user => 
-        user.email === signupData.email || user.phone === signupData.phone
+      const response = await fetch(
+        "https://optigov-backend.onrender.com/api/auth/register/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: signupData.fullName,
+            email: signupData.email,
+            phone: signupData.phone,
+            password: signupData.password,
+            password_confirm: signupData.confirmPassword,
+            role: activeTab,
+          }),
+        }
       );
+      const data = await response.json();
 
-      if (userExists) {
-        setError('User with this email or phone number already exists');
+      console.log("Signup response:", data);
+      if (!response.ok) {
+        setError(data.message || "Signup failed. Please try again.");
         setLoading(false);
         return;
       }
 
-      // Create new user
-      const newUser: StoredUser = {
-        id: Date.now().toString(),
-        fullName: signupData.fullName,
-        email: signupData.email,
-        phone: signupData.phone,
-        password: signupData.password, // In real app, this would be hashed
-        role: activeTab,
-        createdAt: new Date().toISOString()
-      };
+      // Get existing users from localStorage
+      // const existingUsers: StoredUser[] = JSON.parse(localStorage.getItem('optigov_users') || '[]');
 
-      // Save to localStorage with persistent key
-      const updatedUsers = [...existingUsers, newUser];
-      localStorage.setItem('optigov_users', JSON.stringify(updatedUsers));
+      // // Check if user already exists
+      // const userExists = existingUsers.some(user =>
+      //   user.email === signupData.email || user.phone === signupData.phone
+      // );
+
+      // if (userExists) {
+      //   setError('User with this email or phone number already exists');
+      //   setLoading(false);
+      //   return;
+      // }
+
+      // // Create new user
+      // const newUser: StoredUser = {
+      //   id: Date.now().toString(),
+      //   fullName: signupData.fullName,
+      //   email: signupData.email,
+      //   phone: signupData.phone,
+      //   password: signupData.password, // In real app, this would be hashed
+      //   role: activeTab,
+      //   createdAt: new Date().toISOString()
+      // };
+
+      // // Save to localStorage with persistent key
+      // const updatedUsers = [...existingUsers, newUser];
+      // localStorage.setItem('optigov_users', JSON.stringify(updatedUsers));
 
       // Simulate API call delay
       setTimeout(() => {
         login(signupData.email, activeTab, signupData.fullName);
-        
+
         // Redirect based on role
         switch (activeTab) {
-          case 'citizen':
-            navigate('/citizen-dashboard');
+          case "citizen":
+            navigate("/citizen-dashboard");
             break;
-          case 'company':
-            navigate('/company-dashboard');
+          case "company":
+            navigate("/company-dashboard");
             break;
-          case 'admin':
-            navigate('/admin-dashboard');
+          case "admin":
+            navigate("/admin-dashboard");
             break;
         }
         setLoading(false);
       }, 1000);
     } catch (error) {
-      setError('An error occurred during signup. Please try again.');
+      setError("An error occurred during signup. Please try again.");
       setLoading(false);
     }
   };
 
   const handleLogin = async () => {
-    setError('');
-    
+    setError("");
+
     if (!loginData.emailOrPhone.trim()) {
-      setError('Email or phone number is required');
+      setError("Email or phone number is required");
       return;
     }
-    
+
     if (!loginData.password.trim()) {
-      setError('Password is required');
+      setError("Password is required");
       return;
     }
 
@@ -206,63 +226,67 @@ const LoginPage: React.FC = () => {
 
     try {
       // Get users from localStorage with persistent key
-      const existingUsers: StoredUser[] = JSON.parse(localStorage.getItem('optigov_users') || '[]');
-      
+      const existingUsers: StoredUser[] = JSON.parse(
+        localStorage.getItem("optigov_users") || "[]"
+      );
+
       // Find user by email or phone
-      const user = existingUsers.find(u => 
-        (u.email === loginData.emailOrPhone || u.phone === loginData.emailOrPhone) &&
-        u.password === loginData.password &&
-        u.role === activeTab
+      const user = existingUsers.find(
+        (u) =>
+          (u.email === loginData.emailOrPhone ||
+            u.phone === loginData.emailOrPhone) &&
+          u.password === loginData.password &&
+          u.role === activeTab
       );
 
       // Simulate API call delay
       setTimeout(() => {
         if (user) {
           login(user.email, user.role, user.fullName);
-          
+
           // Redirect based on role
           switch (user.role) {
-            case 'citizen':
-              navigate('/citizen-dashboard');
+            case "citizen":
+              navigate("/citizen-dashboard");
               break;
-            case 'company':
-              navigate('/company-dashboard');
+            case "company":
+              navigate("/company-dashboard");
               break;
-            case 'admin':
-              navigate('/admin-dashboard');
+            case "admin":
+              navigate("/admin-dashboard");
               break;
           }
         } else {
-          setError('Invalid credentials or user not found for this role');
+          setError("Invalid credentials or user not found for this role");
         }
         setLoading(false);
       }, 1000);
     } catch (error) {
-      setError('An error occurred during login. Please try again.');
+      setError("An error occurred during login. Please try again.");
       setLoading(false);
     }
   };
 
   const handleTabChange = (role: UserRole) => {
     setActiveTab(role);
-    setSignupData(prev => ({ ...prev, role }));
-    setError('');
+    setSignupData((prev) => ({ ...prev, role }));
+    setError("");
   };
 
   const resetForms = () => {
     setSignupData({
-      fullName: '',
-      email: '',
-      phone: '',
-      password: '',
-      confirmPassword: '',
-      role: activeTab
+      fullName: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+      role: activeTab,
     });
     setLoginData({
-      emailOrPhone: '',
-      password: ''
+      emailOrPhone: "",
+      password: "",
     });
-    setError('');
+    setError("");
   };
 
   const switchMode = (mode: FormMode) => {
@@ -277,22 +301,33 @@ const LoginPage: React.FC = () => {
           onClick={toggleTheme}
           className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
         >
-          {isDark ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-gray-500" />}
+          {isDark ? (
+            <Sun className="h-5 w-5 text-yellow-500" />
+          ) : (
+            <Moon className="h-5 w-5 text-gray-500" />
+          )}
         </button>
       </div>
 
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center space-x-2 mb-6">
+          <Link
+            to="/"
+            className="inline-flex items-center space-x-2 mb-6"
+          >
             <Shield className="h-10 w-10 text-green-600" />
-            <span className="text-3xl font-bold text-gray-900 dark:text-white">OptiGov</span>
+            <span className="text-3xl font-bold text-gray-900 dark:text-white">
+              OptiGov
+            </span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            {formMode === 'login' ? 'Welcome Back' : 'Create Account'}
+            {formMode === "login" ? "Welcome Back" : "Create Account"}
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            {formMode === 'login' ? 'Sign in to your account' : 'Join OptiGov to protect your data rights'}
+            {formMode === "login"
+              ? "Sign in to your account"
+              : "Join OptiGov to protect your data rights"}
           </p>
         </div>
 
@@ -306,7 +341,7 @@ const LoginPage: React.FC = () => {
                 className={`flex-1 py-4 px-4 text-sm font-medium transition-colors ${
                   activeTab === tab.key
                     ? `${tab.color} text-white`
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 }`}
               >
                 {tab.label}
@@ -318,21 +353,21 @@ const LoginPage: React.FC = () => {
             {/* Mode Toggle */}
             <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 mb-6">
               <button
-                onClick={() => switchMode('login')}
+                onClick={() => switchMode("login")}
                 className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-                  formMode === 'login'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400'
+                  formMode === "login"
+                    ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-400"
                 }`}
               >
                 Login
               </button>
               <button
-                onClick={() => switchMode('signup')}
+                onClick={() => switchMode("signup")}
                 className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-                  formMode === 'signup'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400'
+                  formMode === "signup"
+                    ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-400"
                 }`}
               >
                 Sign Up
@@ -342,10 +377,13 @@ const LoginPage: React.FC = () => {
             {/* Email Guidelines */}
             <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>Email Guidelines:</strong><br />
-                {activeTab === 'citizen' && '• Citizens: Use personal emails (gmail.com, yahoo.com, etc.)'}
-                {activeTab === 'company' && '• Companies: Use business domains (company.com.ng, business.com, etc.)'}
-                {activeTab === 'admin' && '• Admins: Can use any email type'}
+                <strong>Email Guidelines:</strong>
+                <br />
+                {activeTab === "citizen" &&
+                  "• Citizens: Use personal emails (gmail.com, yahoo.com, etc.)"}
+                {activeTab === "company" &&
+                  "• Companies: Use business domains (company.com.ng, business.com, etc.)"}
+                {activeTab === "admin" && "• Admins: Can use any email type"}
               </p>
             </div>
 
@@ -353,11 +391,13 @@ const LoginPage: React.FC = () => {
             {error && (
               <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-2">
                 <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+                <span className="text-sm text-red-700 dark:text-red-300">
+                  {error}
+                </span>
               </div>
             )}
 
-            {formMode === 'signup' ? (
+            {formMode === "signup" ? (
               /* Signup Form */
               <div className="space-y-4">
                 <div>
@@ -369,7 +409,12 @@ const LoginPage: React.FC = () => {
                     <input
                       type="text"
                       value={signupData.fullName}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, fullName: e.target.value }))}
+                      onChange={(e) =>
+                        setSignupData((prev) => ({
+                          ...prev,
+                          fullName: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Enter your full name"
                     />
@@ -385,12 +430,19 @@ const LoginPage: React.FC = () => {
                     <input
                       type="email"
                       value={signupData.email}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, email: e.target.value }))}
+                      onChange={(e) =>
+                        setSignupData((prev) => ({
+                          ...prev,
+                          email: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder={
-                        activeTab === 'citizen' ? 'user@gmail.com' :
-                        activeTab === 'company' ? 'admin@company.com.ng' :
-                        'admin@optigov.ng'
+                        activeTab === "citizen"
+                          ? "user@gmail.com"
+                          : activeTab === "company"
+                          ? "admin@company.com.ng"
+                          : "admin@optigov.ng"
                       }
                     />
                   </div>
@@ -405,7 +457,12 @@ const LoginPage: React.FC = () => {
                     <input
                       type="tel"
                       value={signupData.phone}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={(e) =>
+                        setSignupData((prev) => ({
+                          ...prev,
+                          phone: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="+234 xxx xxx xxxx"
                     />
@@ -419,9 +476,14 @@ const LoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={signupData.password}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                      onChange={(e) =>
+                        setSignupData((prev) => ({
+                          ...prev,
+                          password: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Create a password"
                     />
@@ -430,7 +492,11 @@ const LoginPage: React.FC = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -442,18 +508,29 @@ const LoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <input
-                      type={showConfirmPassword ? 'text' : 'password'}
+                      type={showConfirmPassword ? "text" : "password"}
                       value={signupData.confirmPassword}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      onChange={(e) =>
+                        setSignupData((prev) => ({
+                          ...prev,
+                          confirmPassword: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Confirm your password"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
                       className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     >
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -462,10 +539,10 @@ const LoginPage: React.FC = () => {
                   onClick={handleSignup}
                   disabled={loading}
                   className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-                    tabs.find(t => t.key === activeTab)?.color
+                    tabs.find((t) => t.key === activeTab)?.color
                   } text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {loading ? 'Creating Account...' : 'Create Account'}
+                  {loading ? "Creating Account..." : "Create Account"}
                 </button>
               </div>
             ) : (
@@ -480,7 +557,12 @@ const LoginPage: React.FC = () => {
                     <input
                       type="text"
                       value={loginData.emailOrPhone}
-                      onChange={(e) => setLoginData(prev => ({ ...prev, emailOrPhone: e.target.value }))}
+                      onChange={(e) =>
+                        setLoginData((prev) => ({
+                          ...prev,
+                          emailOrPhone: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Enter email or phone number"
                     />
@@ -494,9 +576,14 @@ const LoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={loginData.password}
-                      onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
+                      onChange={(e) =>
+                        setLoginData((prev) => ({
+                          ...prev,
+                          password: e.target.value,
+                        }))
+                      }
                       className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Enter your password"
                     />
@@ -505,7 +592,11 @@ const LoginPage: React.FC = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -514,10 +605,10 @@ const LoginPage: React.FC = () => {
                   onClick={handleLogin}
                   disabled={loading}
                   className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-                    tabs.find(t => t.key === activeTab)?.color
+                    tabs.find((t) => t.key === activeTab)?.color
                   } text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {loading ? 'Signing In...' : 'Sign In'}
+                  {loading ? "Signing In..." : "Sign In"}
                 </button>
               </div>
             )}
