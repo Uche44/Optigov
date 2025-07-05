@@ -18,7 +18,7 @@ import {
   UserRole,
   SignupData,
   LoginData,
-  StoredUser,
+  // StoredUser,
 } from "../types/authTypes";
 
 // type UserRole = 'citizen' | 'company' | 'admin';
@@ -204,6 +204,7 @@ const LoginPage: React.FC = () => {
         setLoading(false);
       }, 1000);
     } catch (error) {
+      console.error("Signup error:", error);
       setError("An error occurred during signup. Please try again.");
       setLoading(false);
     }
@@ -225,47 +226,116 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // Get users from localStorage with persistent key
-      const existingUsers: StoredUser[] = JSON.parse(
-        localStorage.getItem("optigov_users") || "[]"
-      );
-
-      // Find user by email or phone
-      const user = existingUsers.find(
-        (u) =>
-          (u.email === loginData.emailOrPhone ||
-            u.phone === loginData.emailOrPhone) &&
-          u.password === loginData.password &&
-          u.role === activeTab
-      );
-
-      // Simulate API call delay
-      setTimeout(() => {
-        if (user) {
-          login(user.email, user.role, user.fullName);
-
-          // Redirect based on role
-          switch (user.role) {
-            case "citizen":
-              navigate("/citizen-dashboard");
-              break;
-            case "company":
-              navigate("/company-dashboard");
-              break;
-            case "admin":
-              navigate("/admin-dashboard");
-              break;
-          }
-        } else {
-          setError("Invalid credentials or user not found for this role");
+      const response = await fetch(
+        "https://optigov-backend.onrender.com/api/auth/login/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            // Adjust these keys to match your backend expectations
+            email_or_phone: loginData.emailOrPhone,
+            password: loginData.password,
+          }),
         }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(
+          data.detail || data.message || "Login failed. Please try again."
+        );
         setLoading(false);
-      }, 1000);
+        return;
+      }
+
+     
+      // localStorage.setItem("token", data.token);
+
+      // Call your login context and redirect based on role if needed
+      login(data.email, data.role, data.fullName);
+
+      switch (data.role) {
+        case "citizen":
+          navigate("/citizen-dashboard");
+          break;
+        case "company":
+          navigate("/company-dashboard");
+          break;
+        case "admin":
+          navigate("/admin-dashboard");
+          break;
+        default:
+          navigate("/");
+      }
+
+      setLoading(false);
     } catch (error) {
+      console.error("Login error:", error);
       setError("An error occurred during login. Please try again.");
       setLoading(false);
     }
   };
+
+  // const handleLogin = async () => {
+  //   setError("");
+
+  //   if (!loginData.emailOrPhone.trim()) {
+  //     setError("Email or phone number is required");
+  //     return;
+  //   }
+
+  //   if (!loginData.password.trim()) {
+  //     setError("Password is required");
+  //     return;
+  //   }
+
+  //   setLoading(true);
+
+  //   try {
+  //     // Get users from localStorage with persistent key
+  //     const existingUsers: StoredUser[] = JSON.parse(
+  //       localStorage.getItem("optigov_users") || "[]"
+  //     );
+
+  //     // Find user by email or phone
+  //     const user = existingUsers.find(
+  //       (u) =>
+  //         (u.email === loginData.emailOrPhone ||
+  //           u.phone === loginData.emailOrPhone) &&
+  //         u.password === loginData.password &&
+  //         u.role === activeTab
+  //     );
+
+  //     // Simulate API call delay
+  //     setTimeout(() => {
+  //       if (user) {
+  //         login(user.email, user.role, user.fullName);
+
+  //         // Redirect based on role
+  //         switch (user.role) {
+  //           case "citizen":
+  //             navigate("/citizen-dashboard");
+  //             break;
+  //           case "company":
+  //             navigate("/company-dashboard");
+  //             break;
+  //           case "admin":
+  //             navigate("/admin-dashboard");
+  //             break;
+  //         }
+  //       } else {
+  //         setError("Invalid credentials or user not found for this role");
+  //       }
+  //       setLoading(false);
+  //     }, 1000);
+  //   } catch (error) {
+  //     setError("An error occurred during login. Please try again.");
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleTabChange = (role: UserRole) => {
     setActiveTab(role);
